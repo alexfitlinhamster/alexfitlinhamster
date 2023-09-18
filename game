@@ -1,0 +1,317 @@
+import pygame
+import sys
+import time
+import random
+
+# Инициализация Pygame
+pygame.init()
+
+# Параметры окна игры
+WIDTH, HEIGHT = 800, 600
+win = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Игра с кубом")
+
+# Цвета
+WHITE = (255, 255, 255)
+BLUE = (0, 0, 255)
+RED = (255, 0, 0)
+
+# Параметры игрока
+player_width, player_height = 50, 50
+player_x, player_y = WIDTH // 2 - player_width // 2, HEIGHT - player_height
+player_speed = 5
+player_lives = 3  # Количество жизней игрока
+
+# Параметры снаряда
+bullet_width, bullet_height = 40, 10
+bullet_speed_x = 10
+bullet_cooldown = 1.0
+last_shot_time = 0
+
+# Параметры игры для разных уровней сложности
+enemy_speeds = {
+    1: 3,
+    2: 5,
+    3: 7,
+    4: 10
+}
+enemy_healths = {
+    1: 1,
+    2: 2,
+    3: 3,
+    4: 5
+}
+game_difficulty = 1  # Установите начальный уровень сложности
+
+# Счетчик монет
+coins = 0
+
+# Списки для хранения активных снарядов
+bullets = []
+
+# Флаг для определения режима игры (True - игра, False - меню)
+game_mode = False
+
+# Уровни сложности
+EASY = 1
+MEDIUM = 2
+HARD = 3
+VERY_HARD = 4
+level_5 = 5
+
+# Параметры игры для разных уровней сложности
+enemy_speeds = {EASY: 3, MEDIUM: 5, HARD: 7, VERY_HARD: 10, level_5: 12}
+enemy_healths = {EASY: 1, MEDIUM: 2, HARD: 3, VERY_HARD: 4, level_5: 5}
+game_difficulty = EASY
+
+# Параметры для прыжка игрока
+player_jump_height = 10
+player_jump_count = 10
+is_jumping = False
+
+# Параметры игрока
+player_damage = 1
+
+# Переменная для отслеживания количества убитых врагов
+enemies_killed = 0
+
+# Шрифт для отображения уровня сложности
+difficulty_font = pygame.font.Font(None, 36)
+
+# Параметры врага
+enemy_width, enemy_height = 50, 50
+enemy_x, enemy_y = WIDTH - enemy_width, HEIGHT - enemy_height
+
+# Создайте класс Enemy
+class Enemy:
+    def __init__(self):
+        self.width = enemy_width
+        self.height = enemy_height
+        self.x = WIDTH - self.width
+        self.y = HEIGHT - self.height
+        self.speed = enemy_speeds[game_difficulty]
+        self.health = enemy_healths[game_difficulty]
+
+    def move(self):
+        self.x -= self.speed
+        if self.x + self.width < 0:
+            self.x = WIDTH
+            self.y = HEIGHT - self.height
+            self.health = enemy_healths[game_difficulty]
+
+        if self.health <= 0:
+            self.x = WIDTH
+            self.y = HEIGHT - self.height
+            self.health = enemy_healths[game_difficulty]
+            return True
+        return False
+
+# Создайте список для врагов
+enemies = []
+
+
+
+
+class EnemyBase:
+    def __init__(self):
+        self.width = 100
+        self.height = 100
+        self.x = 700
+        self.y = HEIGHT - self.height
+        self.health = 10
+
+
+
+# Создайте экземпляр базы врага
+enemy_base = EnemyBase()
+
+def spawn_enemy():
+    enemy = Enemy()
+    enemies.append(enemy)
+
+def main_menu():
+    global game_mode, game_difficulty, enemies_killed
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    game_mode = True
+                    running = False
+                elif event.key == pygame.K_1:
+                    game_difficulty = EASY
+                elif event.key == pygame.K_2:
+                    game_difficulty = MEDIUM
+                elif event.key == pygame.K_3:
+                    game_difficulty = HARD
+                elif event.key == pygame.K_4:
+                    game_difficulty = VERY_HARD
+                elif event.key == pygame.K_5:
+                    game_difficulty = level_5
+
+        win.fill(WHITE)
+        play_text = difficulty_font.render("Play", True, BLUE)
+        difficulty_text = difficulty_font.render(f"Difficulty: {game_difficulty}", True, BLUE)
+        lives_text = difficulty_font.render(f"Lives: {player_lives}", True, BLUE)
+        win.blit(play_text, (WIDTH // 2 - play_text.get_width() // 2, HEIGHT // 2 - 50))
+        win.blit(difficulty_text, (WIDTH // 2 - difficulty_text.get_width() // 2, HEIGHT // 2 + 50))
+        win.blit(lives_text, (10, 10))
+        pygame.display.update()
+
+def game_loop():
+    global bullets, coins, player_x, player_y, enemy_health, last_shot_time, game_difficulty, enemies_killed, player_damage, is_jumping, player_lives, jump_count, boss, enemy_base
+
+    coin_count = 0
+
+    enemy_health = enemy_healths[game_difficulty]
+
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_LEFT] and player_x > 0:
+            player_x -= player_speed
+        if keys[pygame.K_RIGHT]:
+            player_x += player_speed
+        if not is_jumping:
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_UP]:
+                is_jumping = True
+                jump_count = player_jump_count
+
+        if is_jumping:
+            if jump_count >= -player_jump_count:
+                player_y -= (jump_count ** 2) * 0.5 * (1 if jump_count > 0 else -1)
+                jump_count -= 1
+            else:
+                is_jumping = False
+
+        if keys[pygame.K_SPACE]:
+            current_time = time.time()
+            if current_time - last_shot_time >= bullet_cooldown:
+                bullet_x = player_x + player_width // 2 - bullet_width // 2
+                bullet_y = player_y
+                bullets.append((bullet_x, bullet_y))
+                last_shot_time = current_time
+
+        new_bullets = []
+        for bullet_x, bullet_y in bullets:
+            bullet_x += bullet_speed_x
+            if bullet_x < WIDTH:
+                new_bullets.append((bullet_x, bullet_y))
+        bullets = new_bullets
+
+        if len(enemies) == 0:
+            spawn_enemy()
+
+        for enemy in enemies:
+            enemy.move()
+            if enemy.x + enemy.width < 0:
+                enemies.remove(enemy)
+                player_lives -= 1
+                if player_lives <= 0:
+                    print("Игрок проиграл!")
+                    running = False
+
+        enemy_rect = pygame.Rect(enemy.x, enemy.y, enemy.width, enemy.height)
+        new_bullets = []
+        for bullet_x, bullet_y in bullets:
+            bullet_rect = pygame.Rect(bullet_x, bullet_y, bullet_width, bullet_height)
+            if bullet_rect.colliderect(enemy_rect):
+                bullets.remove((bullet_x, bullet_y))
+                enemy_health -= player_damage
+                if enemy_health <= 0:
+                    enemy.x = WIDTH
+                    enemy.y = HEIGHT - enemy.height
+                    coins += 1
+                    coin_count += 1
+                    enemy_health = enemy_healths[game_difficulty]
+                    enemies_killed += 1
+                    if coin_count == 15 and player_damage == 1:
+                        player_damage = 2
+                    if coin_count == 30 and player_damage == 2:
+                        player_damage = 3
+                    if enemies_killed == 10:
+                        if game_difficulty < level_5:
+                            game_difficulty += 1
+                        enemies_killed = 0
+
+            else:
+                new_bullets.append((bullet_x, bullet_y))
+        bullets = new_bullets
+
+        player_rect = pygame.Rect(player_x, player_y, player_width, player_height)
+        if player_rect.colliderect(enemy_rect):
+            player_lives -= 1
+            if player_lives <= 0:
+                print("Игрок проиграл!")
+                running = False
+            else:
+                player_x = WIDTH // 2 - player_width // 2
+                player_y = HEIGHT - player_height
+
+        win.fill(WHITE)
+        pygame.draw.rect(win, BLUE, (player_x, player_y, player_width, player_height))
+        for bullet_x, bullet_y in bullets:
+            pygame.draw.rect(win, RED, (bullet_x, bullet_y, bullet_width, bullet_height))
+        
+        for enemy in enemies:
+            pygame.draw.rect(win, RED, (enemy.x, enemy.y, enemy.width, enemy.height))
+
+        # Отрисовка базы врага
+        pygame.draw.rect(win, RED, (enemy_base.x, enemy_base.y, enemy_base.width, enemy_base.height))
+        
+        coin_text = difficulty_font.render(f"Coins: {coins}", True, BLUE)
+        win.blit(coin_text, (10, 10))
+
+        difficulty_text = difficulty_font.render(f"Difficulty: {game_difficulty}", True, BLUE)
+        win.blit(difficulty_text, (10, 50))
+
+        lives_text = difficulty_font.render(f"Lives: {player_lives}", True, BLUE)
+        win.blit(lives_text, (10, 90))
+
+        pygame.display.update()
+
+        pygame.time.delay(30)
+
+def game_over():
+    global player_lives
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+        win.fill(WHITE)
+        font = pygame.font.Font(None, 72)
+        game_over_text = font.render("Game Over", True, RED)
+        restart_text = difficulty_font.render("Press 'R' to restart", True, BLUE)
+        win.blit(game_over_text, (WIDTH // 2 - game_over_text.get_width() // 2, HEIGHT // 2 - 50))
+        win.blit(restart_text, (WIDTH // 2 - restart_text.get_width() // 2, HEIGHT // 2 + 50))
+        pygame.display.update()
+
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_r]:
+            player_lives = 3
+            player_damage = 1 
+            enemies_killed = 0
+                        
+            main_menu()
+            game_loop()
+
+# Запуск меню
+main_menu()
+
+# Запуск игры
+if game_mode:
+    game_loop()
+    game_over()
+
+# Завершение игры
+pygame.quit()
+sys.exit()
